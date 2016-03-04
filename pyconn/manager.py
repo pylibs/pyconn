@@ -88,6 +88,11 @@ class ConnectionManager(object):
         if self.send_thread is not None:
             self.send_thread.join()
 
+        for sock in self.local_sockets + self.remote_sockets:
+            sock.close()
+
+        self.initialized = False
+
     def start(self):
         self.init()
         if not self.initialized:
@@ -180,7 +185,7 @@ class ConnectionManager(object):
                 self.remote_sockets.remove(sock)
             elif sock in self.local_sockets:
                 self.local_sockets.remove(sock)
-                self.sockets_dict.pop(sock.name)
+                self.sockets_dict.pop(sock.target_name)
             sock.close()
             return
 
