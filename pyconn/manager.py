@@ -22,16 +22,9 @@ class ConnectionManager(object):
         self.listener_enabled = kwargs.pop('enable_listener', False)
         self.timeout = kwargs.pop('timeout', DEFAULT_TIMEOUT)
 
-        # List of accepted sockets
-        self.remote_sockets = []
-        self.remote_sockets_dict = {}
-        self.remote_sockets_rdict = {}
-
-        # List of locally created sockets
-        self.local_sockets = []
-        self.local_sockets_dict = {}
-        self.local_sockets_rdict = {}
-
+        # List of sockets
+        self.remote_sockets = []  # Accepted sockets
+        self.local_sockets = []   # Locally created sockets
         self.sockets_dict = {}
 
         # Listener
@@ -84,14 +77,17 @@ class ConnectionManager(object):
 
         if self.receive_thread is not None:
             self.receive_thread.join()
+            self.logger.info('[ReceiveLoop] thread stopped successfully.')
 
         if self.send_thread is not None:
             self.send_thread.join()
+            self.logger.info('[SendLoop] thread stopped successfully.')
 
         for sock in self.local_sockets + self.remote_sockets:
             sock.close()
 
         self.initialized = False
+        self.logger.info('De-initialization complete.')
 
     def start(self):
         self.init()
@@ -103,12 +99,15 @@ class ConnectionManager(object):
         if self.listener_enabled:
             self.accept_thread = threading.Thread(target=self.accept_loop, name='AcceptLoop')
             self.accept_thread.start()
+            self.logger.info('Started [AcceptLoop] thread.')
 
         self.receive_thread = threading.Thread(target=self.receive_loop, name='ReceiveLoop')
         self.receive_thread.start()
+        self.logger.info('Started [ReceiveLoop] thread.')
 
         self.send_thread = threading.Thread(target=self.send_loop, name='SendLoop')
         self.send_thread.start()
+        self.logger.info('Started [SendLoop] thread.')
 
     def stop(self):
         self.active = False
@@ -145,6 +144,7 @@ class ConnectionManager(object):
                 sock.init()
                 self.remote_sockets.append(sock)
                 self.sockets_dict[sock.target_name] = sock
+                self.logger.debug('New connection from [%s].' % sock.target_name)
             except socket.timeout:
                 pass  # This is expected
 
@@ -157,6 +157,7 @@ class ConnectionManager(object):
                     self.logger.error('Could not find connected target [%s]' % message.target)
                 else:
                     sock.send_obj(message)
+                    self.logger.debug('Message sent to target [%s] queue [%s]' % (message.target, message.target_qname))
             except queue.Empty:
                 pass  # This is expected
 
