@@ -1,10 +1,12 @@
 import logging
 import queue
 import select, socket
+import ssl
 import threading, time
 import uuid
 
 from .wrapper import SocketWrapper
+
 
 # constants
 DEFAULT_BACKLOG = 5
@@ -20,6 +22,7 @@ class ConnectionManager(object):
         # properties
         self.name = kwargs.pop('name', str(uuid.uuid4()))
         self.listener_enabled = kwargs.pop('enable_listener', False)
+        self.ssl_enabled = kwargs.pop('ssl_enabled', False)
         self.timeout = kwargs.pop('timeout', DEFAULT_TIMEOUT)
 
         # List of sockets
@@ -33,6 +36,11 @@ class ConnectionManager(object):
             self.listen_host = kwargs.pop('listen_host', DEFAULT_LISTEN_HOST)
             self.listen_port = kwargs.pop('listen_port', DEFAULT_LISTEN_PORT)
             self.listen_backlog = kwargs.pop('listen_backlog', DEFAULT_BACKLOG)
+
+        if self.ssl_enabled:
+            self.cert_file = kwargs.pop('cert_file', None)
+            self.key_file = kwargs.pop('key_file', None)
+            self.ssl_version = kwargs.pop('ssl_version', ssl.PROTOCOL_TLSv1_2)
 
         self.queues = {}
         self.send_queue = queue.Queue()
@@ -50,6 +58,8 @@ class ConnectionManager(object):
         if self.listener_enabled:
             try:
                 self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                if self.ssl_enabled:
+                    pass
                 self.listen_socket.bind((self.listen_host, self.listen_port))
                 self.listen_socket.listen(self.listen_backlog)
                 self.listen_socket.settimeout(self.timeout)
@@ -118,6 +128,8 @@ class ConnectionManager(object):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((host, port))
+            if self.ssl_enabled:
+                sock = ssl.wrap_socket(sock, ssl_version=self.ssl_version)
             sock = SocketWrapper(self, sock, self.name)
             sock.init()
             self.sockets_dict[sock.target_name] = sock
@@ -140,6 +152,11 @@ class ConnectionManager(object):
         while self.active:
             try:
                 sock, addr = self.listen_socket.accept()
+                if self.ssl_enabled:
+                    sock = ssl.wrap_socket(sock, server_side=True,
+                                           certfile=self.cert_file,
+                                           keyfile=self.key_file,
+                                           ssl_version=self.ssl_version)
                 sock = SocketWrapper(self, sock, self.name)
                 sock.init()
                 self.remote_sockets.append(sock)
